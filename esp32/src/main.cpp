@@ -2,14 +2,12 @@
 #include <WiFi.h>
 #include <driver/i2s.h>
 #include <HTTPClient.h>
-#include <WebSocketsClient.h>
 #include "config.h"
 #include "api_client.h"
 
 #if HAS_EYES
 #include "display.h"
-EyeDisplay leftEye;
-EyeDisplay rightEye;
+EyeDisplay leftEye, rightEye;
 EyeRenderer eyes;
 unsigned long lastLookChange = 0;
 #endif
@@ -20,8 +18,6 @@ AudioPlayer speaker;
 #endif
 
 ApiClient api;
-WebSocketsClient webSocket;
-bool wsConnected = false;
 
 #if HAS_SPEAKER
 uint8_t* base64Decode(const String& input, size_t* outLen);
@@ -33,8 +29,7 @@ void connectWiFi() {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-        delay(500);
-        Serial.print(".");
+        delay(500); Serial.print(".");
         attempts++;
     }
     if (WiFi.status() == WL_CONNECTED)
@@ -62,111 +57,142 @@ void updateEyes() {
 #endif
 }
 
-// WebSocket 事件处理
-void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
-    switch (type) {
-        case WStype_CONNECTED:
-            wsConnected = true;
-            Serial.println("WebSocket 已连接");
-            break;
+// 流式聊天 — 发送消息，SSE 接收逐句文本+音频
+void streamChat(const String& message) {
+    Serial.println("你: " + message);
 
-        case WStype_DISCONNECTED:
-            wsConnected = false;
-            Serial.println("WebSocket 断开，自动重连...");
-            break;
+    HTTPClient http;
+    api.httpBegin(http, "/chat/stream");
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(60000);
 
-        case WStype_TEXT: {
-            String msg = String((char*)payload);
+    String body = "{\"user_id\":" + String(api.userId) + ",\"message\":\"" + message + "\"}";
+    int code = http.POST(body);
 
-            // 判断消息类型
-            if (msg.indexOf("\"type\":\"reply\"") >= 0 || msg.indexOf("\"type\": \"reply\"") >= 0) {
-                // HTTP 模式的完整回复推送
-                String reply = extractJson(msg, "reply");
-                String expression = extractJson(msg, "expression");
-                Serial.println("小星: " + reply);
-                api.expression = expression;
-                updateEyes();
+    if (code != 200) {
+        Serial.println("流式请求失败: " + String(code));
+        // 回退到普通聊天
+        String reply = api.chat(message);
+        Serial.println("小星: " + reply);
+        playNotify();
+        return;
+    }
 
-#if HAS_SPEAKER
-                String audioB64 = extractJson(msg, "audio_base64");
-                if (audioB64.length() > 100) {
-                    size_t audioLen = 0;
-                    uint8_t* audioData = base64Decode(audioB64, &audioLen);
-                    if (audioData && audioLen > 10) {
-                        speaker.playMp3(audioData, audioLen);
-                        free(audioData);
-                    }
-                }
-#endif
-            }
-            else if (msg.indexOf("\"type\":\"reply_chunk\"") >= 0 || msg.indexOf("\"type\": \"reply_chunk\"") >= 0) {
-                // 流式文本片段
-                String text = extractJson(msg, "text");
-                Serial.print(text);
-            }
-            else if (msg.indexOf("\"type\":\"audio_chunk\"") >= 0 || msg.indexOf("\"type\": \"audio_chunk\"") >= 0) {
-                // 流式音频片段 — 收到就播放
-#if HAS_SPEAKER
-                String audioB64 = extractJson(msg, "audio_base64");
-                if (audioB64.length() > 100) {
-                    size_t audioLen = 0;
-                    uint8_t* audioData = base64Decode(audioB64, &audioLen);
-                    if (audioData && audioLen > 10) {
-                        speaker.playMp3(audioData, audioLen);
-                        free(audioData);
-                    }
-                }
-#endif
-            }
-            else if (msg.indexOf("\"type\":\"reply_done\"") >= 0 || msg.indexOf("\"type\": \"reply_done\"") >= 0) {
-                // 回复完成
-                Serial.println();
-                String expression = extractJson(msg, "expression");
-                api.expression = expression;
-                updateEyes();
-                Serial.println("[回复完毕]");
-            }
-            else if (msg.indexOf("\"type\":\"pong\"") >= 0) {
-                // 心跳响应
-            }
-            break;
+    // 读取 SSE 流
+    WiFiClient* stream = http.getStreamPtr();
+    String line;
+    Serial.print("小星: ");
+
+    while (http.connected()) {
+        if (!stream->available()) {
+            delay(10);
+            continue;
         }
 
-        default:
+        line = stream->readStringUntil('\n');
+        if (!line.startsWith("data: ")) continue;
+
+        String data = line.substring(6);
+
+        if (data.indexOf("\"type\":\"text\"") >= 0 || data.indexOf("\"type\": \"text\"") >= 0) {
+            String text = extractJson(data, "text");
+            Serial.print(text);
+        }
+        else if (data.indexOf("\"type\":\"audio\"") >= 0 || data.indexOf("\"type\": \"audio\"") >= 0) {
+#if HAS_SPEAKER
+            String audioB64 = extractJson(data, "audio_base64");
+            if (audioB64.length() > 100) {
+                size_t audioLen = 0;
+                uint8_t* audioData = base64Decode(audioB64, &audioLen);
+                if (audioData && audioLen > 10) {
+                    speaker.playMp3(audioData, audioLen);
+                    free(audioData);
+                }
+            }
+#endif
+        }
+        else if (data.indexOf("\"type\":\"done\"") >= 0 || data.indexOf("\"type\": \"done\"") >= 0) {
+            Serial.println();
+            String expr = extractJson(data, "expression");
+            api.expression = expr;
+            updateEyes();
+
+            String favorStr = extractJson(data, "favorability");
+            if (favorStr.length() > 0) api.favorability = favorStr.toInt();
+
+            Serial.println("[好感:" + String(api.favorability) + " 表情:" + api.expression + "]");
             break;
+        }
     }
+
+    http.end();
 }
 
-void connectWebSocket() {
-    String url = String(SERVER_URL);
-    bool useSSL = url.startsWith("https");
-    url.replace("https://", "");
-    url.replace("http://", "");
+// 轮询后端看有没有从 H5 发的新消息
+void pollForH5Reply() {
+    static unsigned long lastPoll = 0;
+    static int lastReplyId = 0;
 
-    // 去掉尾部斜杠
-    if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
+    if (millis() - lastPoll < 5000) return;
+    lastPoll = millis();
 
-    int colonIdx = url.indexOf(":");
-    String host;
-    int port;
+    HTTPClient http;
+    api.httpBegin(http, "/robot/poll?since_id=" + String(lastReplyId));
+    http.setTimeout(10000);
+    int code = http.GET();
 
-    if (colonIdx > 0) {
-        host = url.substring(0, colonIdx);
-        port = url.substring(colonIdx + 1).toInt();
-    } else {
-        host = url;
-        port = useSSL ? 443 : 80;
+    if (code == 200) {
+        String resp = http.getString();
+        if (resp.indexOf("\"has_new\": true") >= 0 || resp.indexOf("\"has_new\":true") >= 0) {
+            int idIdx = resp.indexOf("\"id\":");
+            int newId = 0;
+            if (idIdx >= 0) {
+                int ns = idIdx + 5;
+                while (ns < (int)resp.length() && resp[ns] == ' ') ns++;
+                newId = resp.substring(ns).toInt();
+            }
+            if (newId > lastReplyId) {
+                lastReplyId = newId;
+                String reply = extractJson(resp, "reply");
+                if (reply.length() > 0) {
+                    Serial.println("[H5] 小星: " + reply);
+
+#if HAS_SPEAKER
+                    // 下载音频
+                    if (resp.indexOf("\"has_audio\": true") >= 0 || resp.indexOf("\"has_audio\":true") >= 0) {
+                        HTTPClient audioHttp;
+                        api.httpBegin(audioHttp, "/robot/audio");
+                        audioHttp.setTimeout(15000);
+                        int ac = audioHttp.GET();
+                        if (ac == 200) {
+                            int len = audioHttp.getSize();
+                            if (len > 100) {
+                                uint8_t* buf = (uint8_t*)ps_malloc(len);
+                                if (!buf) buf = (uint8_t*)malloc(len);
+                                if (buf) {
+                                    WiFiClient* s = audioHttp.getStreamPtr();
+                                    int dl = 0;
+                                    while (dl < len) {
+                                        int av = s->available();
+                                        if (av > 0) { s->readBytes(buf + dl, min(av, len - dl)); dl += min(av, len - dl); }
+                                        delay(1);
+                                    }
+                                    speaker.playMp3(buf, len);
+                                    free(buf);
+                                }
+                            }
+                        }
+                        audioHttp.end();
+                    }
+#endif
+                    String expr = extractJson(resp, "expression");
+                    api.expression = expr;
+                    updateEyes();
+                }
+            }
+        }
     }
-
-    Serial.println("连接 WebSocket: " + host + ":" + String(port) + (useSSL ? " (SSL)" : ""));
-
-    if (useSSL) {
-        webSocket.beginSSL(host.c_str(), port, "/ws/robot");
-    } else {
-        webSocket.begin(host.c_str(), port, "/ws/robot");
-    }
-    webSocket.onEvent(webSocketEvent);
-    webSocket.setReconnectInterval(3000);
+    http.end();
 }
 
 void handleSerialInput() {
@@ -175,67 +201,29 @@ void handleSerialInput() {
     input.trim();
     if (input.length() == 0) return;
 
-    if (input == "/beep") {
-        playNotify();
-        Serial.println("嘟！");
-    }
+    if (input == "/beep") { playNotify(); Serial.println("嘟！"); }
     else if (input == "/state") {
         api.refreshState();
-        Serial.println("[好感:" + String(api.favorability) + " 阶段:" + api.favorStage +
-                       " 心情:" + String(api.mood) + " 表情:" + api.expression + "]");
+        Serial.println("[好感:" + String(api.favorability) + " 阶段:" + api.favorStage + " 心情:" + String(api.mood) + "]");
     }
     else if (input == "/vol+") {
 #if HAS_SPEAKER
         speaker.volume = min(4.0f, speaker.volume + 0.3f);
-        Serial.println("音量: " + String(speaker.volume));
-        playNotify();
+        Serial.println("音量: " + String(speaker.volume)); playNotify();
 #endif
     }
     else if (input == "/vol-") {
 #if HAS_SPEAKER
         speaker.volume = max(0.0f, speaker.volume - 0.3f);
-        Serial.println("音量: " + String(speaker.volume));
-        playNotify();
+        Serial.println("音量: " + String(speaker.volume)); playNotify();
 #endif
-    }
-    else if (input.startsWith("/vol ")) {
-#if HAS_SPEAKER
-        float v = input.substring(5).toFloat();
-        if (v >= 0 && v <= 4.0) {
-            speaker.volume = v;
-            Serial.println("音量: " + String(v));
-            playNotify();
-        }
-#endif
-    }
-    else if (input == "/ws") {
-        Serial.println("WebSocket: " + String(wsConnected ? "已连接" : "未连接"));
     }
     else if (input == "/help") {
-        Serial.println("命令:");
-        Serial.println("  直接输入      → 通过 WebSocket 聊天");
-        Serial.println("  /beep        → 测试喇叭");
-        Serial.println("  /state       → 查看状态");
-        Serial.println("  /vol+/-      → 调节音量");
-        Serial.println("  /ws          → 查看 WebSocket 状态");
-        Serial.println("  /help        → 帮助");
-        Serial.println("");
-        Serial.println("在 Unity App 中聊天，机器人实时说出回复");
+        Serial.println("直接输入 → 流式聊天（逐句播放）");
+        Serial.println("/beep /state /vol+ /vol- /help");
     }
     else {
-        // 通过 WebSocket 发送聊天
-        if (wsConnected) {
-            Serial.println("你: " + input);
-            String chatMsg = "{\"type\":\"chat\",\"user_id\":" + String(api.userId) +
-                             ",\"message\":\"" + input + "\"}";
-            webSocket.sendTXT(chatMsg);
-        } else {
-            // WebSocket 没连上，走 HTTP
-            Serial.println("你: " + input);
-            String reply = api.chat(input);
-            Serial.println("小星: " + reply);
-            playNotify();
-        }
+        streamChat(input);
     }
 }
 
@@ -246,146 +234,51 @@ void setup() {
 
 #if HAS_SPEAKER
     speaker.begin();
-    speaker.playTone(523, 150);
-    delay(50);
-    speaker.playTone(659, 150);
-    delay(50);
-    speaker.playTone(784, 300);
-    speaker.stop();
+    speaker.playTone(523, 150); delay(50);
+    speaker.playTone(659, 150); delay(50);
+    speaker.playTone(784, 300); speaker.stop();
 #endif
 
 #if HAS_EYES
-    leftEye.setup(EYE_L_CS, EYE_L_RST);
-    leftEye.init();
-    leftEye.setRotation(0);
-    leftEye.setBrightness(200);
-    rightEye.setup(EYE_R_CS, EYE_R_RST);
-    rightEye.init();
-    rightEye.setRotation(0);
-    rightEye.setBrightness(200);
-    eyes.init(&leftEye, &rightEye);
-    eyes.setExpression("expr_calm");
+    leftEye.setup(EYE_L_CS, EYE_L_RST); leftEye.init(); leftEye.setRotation(0); leftEye.setBrightness(200);
+    rightEye.setup(EYE_R_CS, EYE_R_RST); rightEye.init(); rightEye.setRotation(0); rightEye.setBrightness(200);
+    eyes.init(&leftEye, &rightEye); eyes.setExpression("expr_calm");
 #endif
 
     connectWiFi();
-
     if (WiFi.status() == WL_CONNECTED) {
         api.initSSL();
         if (api.initUser()) {
             Serial.println("你好！我是" + api.characterName + "！");
+            Serial.println("流式模式 | 逐句播放 | /help 帮助");
             api.refreshState();
             updateEyes();
             playNotify();
         }
-        connectWebSocket();
-        Serial.println("WebSocket + HTTP 轮询 | 手机 H5 聊天实时播报 | /help 帮助");
     }
 }
 
 void loop() {
-    if (WiFi.status() != WL_CONNECTED) {
-        connectWiFi();
-        delay(5000);
-        return;
-    }
+    if (WiFi.status() != WL_CONNECTED) { connectWiFi(); delay(5000); return; }
 
-    webSocket.loop();
     handleSerialInput();
-
-    // WebSocket 心跳（15秒，防止 Railway 断开）
-    static unsigned long lastPing = 0;
-    if (wsConnected && millis() - lastPing > 15000) {
-        webSocket.sendTXT("ping");
-        lastPing = millis();
-    }
-
-    // HTTP 轮询
-    static unsigned long lastPoll = 0;
-    static int lastReplyId = 0;
-    if (millis() - lastPoll > 5000) {
-        lastPoll = millis();
-
-        // 第1步：轮询文本（小数据，快）
-        HTTPClient http;
-        api.httpBegin(http, "/robot/poll?since_id=" + String(lastReplyId));
-        http.setTimeout(10000);
-        int code = http.GET();
-        if (code == 200) {
-            String resp = http.getString();
-            if (resp.indexOf("\"has_new\": true") >= 0 || resp.indexOf("\"has_new\":true") >= 0) {
-                int idIdx = resp.indexOf("\"id\":");
-                int newId = 0;
-                if (idIdx >= 0) {
-                    int ns = idIdx + 5;
-                    while (ns < (int)resp.length() && resp[ns] == ' ') ns++;
-                    newId = resp.substring(ns).toInt();
-                }
-                if (newId > lastReplyId) {
-                    lastReplyId = newId;
-                    String reply = extractJson(resp, "reply");
-                    String expr = extractJson(resp, "expression");
-                    if (reply.length() > 0) {
-                        Serial.println("小星: " + reply);
-                        api.expression = expr;
-                        updateEyes();
-
-#if HAS_SPEAKER
-                        // 第2步：单独下载音频（二进制流，不用 base64）
-                        HTTPClient audioHttp;
-                        api.httpBegin(audioHttp, "/robot/audio");
-                        audioHttp.setTimeout(15000);
-                        int audioCode = audioHttp.GET();
-                        if (audioCode == 200) {
-                            int len = audioHttp.getSize();
-                            if (len > 100) {
-                                uint8_t* buf = (uint8_t*)ps_malloc(len);
-                                if (!buf) buf = (uint8_t*)malloc(len);
-                                if (buf) {
-                                    WiFiClient* stream = audioHttp.getStreamPtr();
-                                    int downloaded = 0;
-                                    while (downloaded < len) {
-                                        int avail = stream->available();
-                                        if (avail > 0) {
-                                            int toRead = min(avail, len - downloaded);
-                                            stream->readBytes(buf + downloaded, toRead);
-                                            downloaded += toRead;
-                                        }
-                                        delay(1);
-                                    }
-                                    Serial.println("播放语音 " + String(len) + "B");
-                                    speaker.playMp3(buf, len);
-                                    free(buf);
-                                }
-                            }
-                        }
-                        audioHttp.end();
-#endif
-                    }
-                }
-            }
-        }
-        http.end();
-    }
+    pollForH5Reply();
 
 #if HAS_EYES
     eyes.update();
 #endif
 
-    delay(5);
+    delay(10);
 }
 
 String extractJson(const String& json, const String& key) {
-    String pattern = "\"" + key + "\":\"";
-    int idx = json.indexOf(pattern);
-    if (idx < 0) {
-        pattern = "\"" + key + "\": \"";
-        idx = json.indexOf(pattern);
-    }
-    if (idx < 0) return "";
-    int start = idx + pattern.length();
-    int end = json.indexOf("\"", start);
-    if (end < 0) return "";
-    return json.substring(start, end);
+    String p = "\"" + key + "\":\"";
+    int i = json.indexOf(p);
+    if (i < 0) { p = "\"" + key + "\": \""; i = json.indexOf(p); }
+    if (i < 0) return "";
+    int s = i + p.length();
+    int e = json.indexOf("\"", s);
+    return e > s ? json.substring(s, e) : "";
 }
 
 #if HAS_SPEAKER
