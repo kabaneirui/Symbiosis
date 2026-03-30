@@ -159,11 +159,11 @@ async def _edge_tts(text: str) -> bytes:
 _whisper_model = None
 
 async def _whisper_stt(audio_data: bytes, audio_format: str = "wav") -> str:
-    """faster-whisper 备用"""
+    """faster-whisper 备用（本地开发用，云端不加载）"""
     global _whisper_model
     try:
+        from faster_whisper import WhisperModel
         if _whisper_model is None:
-            from faster_whisper import WhisperModel
             print("加载 Whisper 模型...")
             _whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
             print("Whisper 加载完成")
@@ -177,6 +177,9 @@ async def _whisper_stt(audio_data: bytes, audio_format: str = "wav") -> str:
                 vad_filter=True,
             )
             return "".join(seg.text for seg in segments).strip()
+    except ImportError:
+        print("Whisper 未安装（云端部署正常，使用火山引擎 STT）")
+        return ""
     except Exception as e:
         print("Whisper 失败:", e)
         return ""

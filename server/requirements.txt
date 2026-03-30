@@ -5,5 +5,5 @@ pydantic
 pydantic-settings
 httpx
 python-dotenv
-faster-whisper
 edge-tts
+websockets

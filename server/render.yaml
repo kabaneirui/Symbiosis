@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: symbiosis-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: VOICE_APP_ID
+        sync: false
+      - key: VOICE_ACCESS_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite:///./symbiosis.db
