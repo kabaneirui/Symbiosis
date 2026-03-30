@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include "config.h"
 
@@ -14,14 +15,31 @@ public:
     String favorStage;
     float mood = 0;
     String expression;
+    WiFiClientSecure _sslClient;
+
+    void initSSL() {
+        _sslClient.setInsecure();
+    }
+
+    void httpBegin(HTTPClient& http, const String& path) {
+        String url = String(SERVER_URL) + path;
+        if (url.startsWith("https")) {
+            http.begin(_sslClient, url);
+        } else {
+            http.begin(url);
+        }
+    }
 
     bool initUser() {
         HTTPClient http;
-        http.begin(String(SERVER_URL) + "/user/init");
+        httpBegin(http, "/user/init");
         http.addHeader("Content-Type", "application/json");
+        http.setTimeout(15000);
 
         String body = "{\"nickname\":\"" + String(USER_NICKNAME) + "\"}";
+        Serial.println("初始化请求: " + String(SERVER_URL) + "/user/init");
         int code = http.POST(body);
+        Serial.println("HTTP 响应码: " + String(code));
 
         if (code == 200) {
             JsonDocument doc;
@@ -42,7 +60,7 @@ public:
         if (userId < 0) return "未登录";
 
         HTTPClient http;
-        http.begin(String(SERVER_URL) + "/chat");
+        httpBegin(http, "/chat");
         http.addHeader("Content-Type", "application/json");
         http.setTimeout(30000);
 
@@ -69,7 +87,7 @@ public:
         if (userId < 0) return "未登录";
 
         HTTPClient http;
-        http.begin(String(SERVER_URL) + "/gift");
+        httpBegin(http, "/gift");
         http.addHeader("Content-Type", "application/json");
         http.setTimeout(30000);
 
@@ -95,7 +113,7 @@ public:
         if (userId < 0) return false;
 
         HTTPClient http;
-        http.begin(String(SERVER_URL) + "/state?user_id=" + String(userId));
+        httpBegin(http, "/state?user_id=" + String(userId));
         int code = http.GET();
 
         if (code == 200) {

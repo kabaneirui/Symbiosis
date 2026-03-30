@@ -138,15 +138,33 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 }
 
 void connectWebSocket() {
-    // 从 SERVER_URL 提取 IP 和端口
     String url = String(SERVER_URL);
+    bool useSSL = url.startsWith("https");
+    url.replace("https://", "");
     url.replace("http://", "");
-    int colonIdx = url.indexOf(":");
-    String host = url.substring(0, colonIdx);
-    int port = url.substring(colonIdx + 1).toInt();
 
-    Serial.println("连接 WebSocket: " + host + ":" + String(port));
-    webSocket.begin(host.c_str(), port, "/ws/robot");
+    // 去掉尾部斜杠
+    if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
+
+    int colonIdx = url.indexOf(":");
+    String host;
+    int port;
+
+    if (colonIdx > 0) {
+        host = url.substring(0, colonIdx);
+        port = url.substring(colonIdx + 1).toInt();
+    } else {
+        host = url;
+        port = useSSL ? 443 : 80;
+    }
+
+    Serial.println("连接 WebSocket: " + host + ":" + String(port) + (useSSL ? " (SSL)" : ""));
+
+    if (useSSL) {
+        webSocket.beginSSL(host.c_str(), port, "/ws/robot");
+    } else {
+        webSocket.begin(host.c_str(), port, "/ws/robot");
+    }
     webSocket.onEvent(webSocketEvent);
     webSocket.setReconnectInterval(3000);
 }
@@ -252,6 +270,7 @@ void setup() {
     connectWiFi();
 
     if (WiFi.status() == WL_CONNECTED) {
+        api.initSSL();
         if (api.initUser()) {
             Serial.println("你好！我是" + api.characterName + "！");
             api.refreshState();

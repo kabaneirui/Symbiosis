@@ -55,8 +55,11 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     push_reply(reply, char.expression, char.favorability, char.mood)
 
     # WebSocket 实时推送给机器人
-    import asyncio
-    asyncio.ensure_future(push_to_robots(reply, char.expression, char.favorability, round(char.mood, 2)))
+    try:
+        await push_to_robots(reply, char.expression, char.favorability, round(char.mood, 2))
+        print("WebSocket 推送完成")
+    except Exception as e:
+        print("WebSocket 推送失败:", e)
 
     return ChatResponse(
         reply=reply,
