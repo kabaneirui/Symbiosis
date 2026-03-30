@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from database import init_db
-from routers import user, chat, gift, state, hotupdate, memory, events, voice, robot, ws, shop, stream
+from routers import user, chat, gift, state, hotupdate, memory, events, voice, robot, ws, shop, stream, speak
 
 app = FastAPI(
     title="Symbiosis - AI 陪伴机器人后端",
@@ -30,6 +30,7 @@ app.include_router(voice.router, tags=["语音"])
 app.include_router(robot.router, tags=["机器人"])
 app.include_router(shop.router, tags=["商店"])
 app.include_router(stream.router, tags=["流式聊天"])
+app.include_router(speak.router, tags=["语音聊天"])
 app.include_router(ws.router, tags=["WebSocket"])
 app.include_router(hotupdate.router, tags=["热更新"])
 
