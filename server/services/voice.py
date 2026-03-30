@@ -145,7 +145,7 @@ async def _edge_tts(text: str) -> bytes:
     """Edge TTS 备用"""
     try:
         import edge_tts
-        communicate = edge_tts.Communicate(text, "zh-CN-XiaoyiNeural")
+        communicate = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
         audio_bytes = io.BytesIO()
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":

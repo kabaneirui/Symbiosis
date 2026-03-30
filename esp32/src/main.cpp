@@ -277,8 +277,9 @@ void setup() {
             updateEyes();
             playNotify();
         }
-        connectWebSocket();
-        Serial.println("WebSocket 模式 | Unity 聊天实时播报 | /help 帮助");
+        // WebSocket 在 Railway 免费版不稳定，改用 HTTP 轮询
+        // connectWebSocket();
+        Serial.println("HTTP 轮询模式 | 手机 H5 聊天实时播报 | /help 帮助");
     }
 }
 
@@ -289,14 +290,52 @@ void loop() {
         return;
     }
 
-    webSocket.loop();
     handleSerialInput();
 
-    // 心跳保活
-    static unsigned long lastPing = 0;
-    if (wsConnected && millis() - lastPing > 30000) {
-        webSocket.sendTXT("ping");
-        lastPing = millis();
+    // HTTP 轮询
+    static unsigned long lastPoll = 0;
+    static int lastReplyId = 0;
+    if (millis() - lastPoll > 5000) {
+        lastPoll = millis();
+        HTTPClient http;
+        api.httpBegin(http, "/robot/poll?since_id=" + String(lastReplyId));
+        http.setTimeout(10000);
+        int code = http.GET();
+        Serial.println("[轮询] code=" + String(code));
+        if (code == 200) {
+            String resp = http.getString();
+            if (resp.indexOf("\"has_new\": true") >= 0 || resp.indexOf("\"has_new\":true") >= 0) {
+                int idIdx = resp.indexOf("\"id\":");
+                int newId = 0;
+                if (idIdx >= 0) {
+                    int ns = idIdx + 5;
+                    while (ns < (int)resp.length() && resp[ns] == ' ') ns++;
+                    newId = resp.substring(ns).toInt();
+                }
+                if (newId > lastReplyId) {
+                    lastReplyId = newId;
+                    String reply = extractJson(resp, "reply");
+                    String expr = extractJson(resp, "expression");
+                    if (reply.length() > 0) {
+                        Serial.println("小星: " + reply);
+                        api.expression = expr;
+                        updateEyes();
+#if HAS_SPEAKER
+                        String audioB64 = extractJson(resp, "audio_base64");
+                        if (audioB64.length() > 100) {
+                            size_t audioLen = 0;
+                            uint8_t* audioData = base64Decode(audioB64, &audioLen);
+                            if (audioData && audioLen > 10) {
+                                speaker.playMp3(audioData, audioLen);
+                                free(audioData);
+                            }
+                        }
+#endif
+                    }
+                }
+            }
+        }
+        http.end();
     }
 
 #if HAS_EYES
