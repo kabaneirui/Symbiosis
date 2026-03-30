@@ -478,6 +478,7 @@ namespace Symbiosis.UI
             var prefab = isUser ? userBubblePrefab : aiBubblePrefab;
             if (prefab == null || contentRoot == null)
             {
+                Debug.LogWarning("气泡 Prefab 或 contentRoot 未设置");
                 Debug.LogWarning("气泡 Prefab 或 contentRoot 未设置，消息: " + text);
                 return;
             }
@@ -486,6 +487,19 @@ namespace Symbiosis.UI
             var label = bubble.GetComponentInChildren<Text>();
             if (label != null)
                 label.text = text;
+
+            // AI 气泡加载头像
+            if (!isUser)
+            {
+                var avatar = bubble.transform.Find("Avatar");
+                if (avatar != null)
+                {
+                    var avatarImg = avatar.GetComponent<Image>();
+                    var sprite = Resources.Load<Sprite>("Head/wusaqi");
+                    if (avatarImg != null && sprite != null)
+                        avatarImg.sprite = sprite;
+                }
+            }
 
             _bubbles.Add(bubble);
             Canvas.ForceUpdateCanvases();
