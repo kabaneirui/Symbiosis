@@ -277,9 +277,8 @@ void setup() {
             updateEyes();
             playNotify();
         }
-        // WebSocket 在 Railway 免费版不稳定，改用 HTTP 轮询
-        // connectWebSocket();
-        Serial.println("HTTP 轮询模式 | 手机 H5 聊天实时播报 | /help 帮助");
+        connectWebSocket();
+        Serial.println("WebSocket + HTTP 轮询 | 手机 H5 聊天实时播报 | /help 帮助");
     }
 }
 
@@ -290,9 +289,17 @@ void loop() {
         return;
     }
 
+    webSocket.loop();
     handleSerialInput();
 
-    // HTTP 轮询
+    // WebSocket 心跳（15秒，防止 Railway 断开）
+    static unsigned long lastPing = 0;
+    if (wsConnected && millis() - lastPing > 15000) {
+        webSocket.sendTXT("ping");
+        lastPing = millis();
+    }
+
+    // HTTP 轮询后备
     static unsigned long lastPoll = 0;
     static int lastReplyId = 0;
     if (millis() - lastPoll > 5000) {

@@ -29,9 +29,14 @@ def _use_volcano():
 async def text_to_speech(text: str) -> bytes:
     """文字转语音"""
     if _use_volcano():
-        return await _volcano_tts(text)
+        print("[TTS] 使用火山引擎")
+        result = await _volcano_tts(text)
+        if result:
+            return result
+        print("[TTS] 火山失败，回退 Edge TTS")
     else:
-        return await _edge_tts(text)
+        print("[TTS] 使用 Edge TTS")
+    return await _edge_tts(text)
 
 
 async def speech_to_text(audio_data: bytes, audio_format: str = "wav") -> str:
