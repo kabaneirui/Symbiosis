@@ -23,7 +23,9 @@ VOLCANO_TTS_SPEAKER = "zh_female_qingxin"  # 清新女声
 
 # 是否使用火山引擎（有 token 就用，没有就用免费方案）
 def _use_volcano():
-    return settings.voice_access_token and settings.voice_access_token != ""
+    # 暂时关闭火山 TTS（V1 API 权限不匹配，V3 待适配）
+    # 等拿到 V3 的 resource_id 后重新开启
+    return False
 
 
 async def text_to_speech(text: str) -> bytes:
@@ -147,10 +149,20 @@ async def _volcano_stt(audio_data: bytes, audio_format: str = "wav") -> str:
 # ==================== 免费备用方案 ====================
 
 async def _edge_tts(text: str) -> bytes:
-    """Edge TTS 备用"""
+    """Edge TTS"""
     try:
         import edge_tts
-        communicate = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+
+        # 用 SSML 让语音更自然
+        ssml = (
+            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">'
+            '<voice name="zh-CN-XiaoxiaoNeural">'
+            '<prosody rate="+5%" pitch="+3%">'
+            + text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            + '</prosody></voice></speak>'
+        )
+
+        communicate = edge_tts.Communicate(ssml, "zh-CN-XiaoxiaoNeural")
         audio_bytes = io.BytesIO()
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
@@ -158,7 +170,17 @@ async def _edge_tts(text: str) -> bytes:
         return audio_bytes.getvalue()
     except Exception as e:
         print("Edge TTS 失败:", e)
-        return b""
+        # SSML 失败就用纯文本
+        try:
+            import edge_tts
+            communicate = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+            audio_bytes = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_bytes.write(chunk["data"])
+            return audio_bytes.getvalue()
+        except:
+            return b""
 
 
 _whisper_model = None
