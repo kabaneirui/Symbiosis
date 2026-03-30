@@ -1,0 +1,61 @@
+# === Unity ===
+Library/
+Temp/
+obj/
+Logs/
+UserSettings/
+MemoryCaptures/
+Recordings/
+*.csproj
+*.sln
+*.suo
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# === Unity Build ===
+[Bb]uild/
+[Bb]uilds/
+AssetBundles/
+
+# === Python 后端 ===
+server/venv/
+server/__pycache__/
+server/**/__pycache__/
+server/*.pyc
+server/symbiosis.db
+*.pyc
+__pycache__/
+
+# === 敏感信息 ===
+server/.env
+.env
+
+# === ESP32 ===
+esp32/.pio/
+esp32/.vscode/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === HybridCLR 包（太大，用户自行 clone）===
+Packages/com.code-philosophy.hybridclr/
+
+# === macOS ===
+.DS_Store
+**/.DS_Store
+
+# === HybridCLR ===
+HybridCLRData/

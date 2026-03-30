@@ -1,0 +1,122 @@
+{
+    "flower": {
+        "name": "一束花",
+        "base_favor": 10,
+        "tags": ["flower", "nature"],
+        "rarity": "common",
+        "cost": 50,
+        "category": "nature"
+    },
+    "coffee": {
+        "name": "一杯咖啡",
+        "base_favor": 8,
+        "tags": ["coffee", "drink"],
+        "rarity": "common",
+        "cost": 30,
+        "category": "food"
+    },
+    "book": {
+        "name": "一本书",
+        "base_favor": 12,
+        "tags": ["book", "knowledge"],
+        "rarity": "rare",
+        "cost": 100,
+        "category": "knowledge"
+    },
+    "music_box": {
+        "name": "音乐盒",
+        "base_favor": 15,
+        "tags": ["music", "gift"],
+        "rarity": "rare",
+        "cost": 150,
+        "category": "entertainment"
+    },
+    "star": {
+        "name": "一颗星星",
+        "base_favor": 25,
+        "tags": ["special", "romantic"],
+        "rarity": "epic",
+        "cost": 500,
+        "category": "special"
+    },
+    "cake": {
+        "name": "蛋糕",
+        "base_favor": 10,
+        "tags": ["food", "sweet"],
+        "rarity": "common",
+        "cost": 40,
+        "category": "food"
+    },
+    "plush_cat": {
+        "name": "猫咪玩偶",
+        "base_favor": 12,
+        "tags": ["cute", "gift"],
+        "rarity": "common",
+        "cost": 60,
+        "category": "gift"
+    },
+    "headphones": {
+        "name": "耳机",
+        "base_favor": 14,
+        "tags": ["music", "tech"],
+        "rarity": "rare",
+        "cost": 120,
+        "category": "entertainment"
+    },
+    "scarf": {
+        "name": "围巾",
+        "base_favor": 11,
+        "tags": ["warm", "clothing"],
+        "rarity": "common",
+        "cost": 70,
+        "category": "gift"
+    },
+    "perfume": {
+        "name": "香水",
+        "base_favor": 16,
+        "tags": ["luxury", "romantic"],
+        "rarity": "rare",
+        "cost": 200,
+        "category": "special"
+    },
+    "game_console": {
+        "name": "游戏机",
+        "base_favor": 18,
+        "tags": ["gaming", "tech"],
+        "rarity": "rare",
+        "cost": 250,
+        "category": "entertainment"
+    },
+    "spider_toy": {
+        "name": "蜘蛛玩具",
+        "base_favor": 3,
+        "tags": ["spider_toy", "prank"],
+        "rarity": "common",
+        "cost": 10,
+        "category": "prank"
+    },
+    "diamond_ring": {
+        "name": "钻石戒指",
+        "base_favor": 35,
+        "tags": ["luxury", "romantic", "special"],
+        "rarity": "legendary",
+        "cost": 1000,
+        "category": "special"
+    },
+    "handwritten_letter": {
+        "name": "手写信",
+        "base_favor": 20,
+        "tags": ["romantic", "personal"],
+        "rarity": "epic",
+        "cost": 0,
+        "category": "special"
+    },
+    "rose_bouquet": {
+        "name": "99朵玫瑰",
+        "base_favor": 30,
+        "tags": ["flower", "romantic", "special"],
+        "rarity": "epic",
+        "cost": 520,
+        "category": "nature"
+    }
+}
