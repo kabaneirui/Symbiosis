@@ -299,16 +299,17 @@ void loop() {
         lastPing = millis();
     }
 
-    // HTTP 轮询后备
+    // HTTP 轮询
     static unsigned long lastPoll = 0;
     static int lastReplyId = 0;
     if (millis() - lastPoll > 5000) {
         lastPoll = millis();
+
+        // 第1步：轮询文本（小数据，快）
         HTTPClient http;
         api.httpBegin(http, "/robot/poll?since_id=" + String(lastReplyId));
         http.setTimeout(10000);
         int code = http.GET();
-        Serial.println("[轮询] code=" + String(code));
         if (code == 200) {
             String resp = http.getString();
             if (resp.indexOf("\"has_new\": true") >= 0 || resp.indexOf("\"has_new\":true") >= 0) {
@@ -327,16 +328,37 @@ void loop() {
                         Serial.println("小星: " + reply);
                         api.expression = expr;
                         updateEyes();
+
 #if HAS_SPEAKER
-                        String audioB64 = extractJson(resp, "audio_base64");
-                        if (audioB64.length() > 100) {
-                            size_t audioLen = 0;
-                            uint8_t* audioData = base64Decode(audioB64, &audioLen);
-                            if (audioData && audioLen > 10) {
-                                speaker.playMp3(audioData, audioLen);
-                                free(audioData);
+                        // 第2步：单独下载音频（二进制流，不用 base64）
+                        HTTPClient audioHttp;
+                        api.httpBegin(audioHttp, "/robot/audio");
+                        audioHttp.setTimeout(15000);
+                        int audioCode = audioHttp.GET();
+                        if (audioCode == 200) {
+                            int len = audioHttp.getSize();
+                            if (len > 100) {
+                                uint8_t* buf = (uint8_t*)ps_malloc(len);
+                                if (!buf) buf = (uint8_t*)malloc(len);
+                                if (buf) {
+                                    WiFiClient* stream = audioHttp.getStreamPtr();
+                                    int downloaded = 0;
+                                    while (downloaded < len) {
+                                        int avail = stream->available();
+                                        if (avail > 0) {
+                                            int toRead = min(avail, len - downloaded);
+                                            stream->readBytes(buf + downloaded, toRead);
+                                            downloaded += toRead;
+                                        }
+                                        delay(1);
+                                    }
+                                    Serial.println("播放语音 " + String(len) + "B");
+                                    speaker.playMp3(buf, len);
+                                    free(buf);
+                                }
                             }
                         }
+                        audioHttp.end();
 #endif
                     }
                 }
