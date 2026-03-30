@@ -18,14 +18,12 @@ TTS_URL = "https://openspeech.bytedance.com/api/v1/tts"
 STT_URL = "https://openspeech.bytedance.com/api/v1/asr"
 
 # TTS 音色（火山引擎）
-VOLCANO_TTS_SPEAKER = "zh_female_qingxin"  # 清新女声
+VOLCANO_TTS_SPEAKER = "zh_female_tianmeitaozi_uranus_bigtts"  # 甜美桃子大模型
 # 其他可选：zh_female_shuangkuai（爽快）、zh_male_chunhou（醇厚男声）
 
 # 是否使用火山引擎（有 token 就用，没有就用免费方案）
 def _use_volcano():
-    # 暂时关闭火山 TTS（V1 API 权限不匹配，V3 待适配）
-    # 等拿到 V3 的 resource_id 后重新开启
-    return False
+    return settings.voice_access_token and settings.voice_access_token != ""
 
 
 async def text_to_speech(text: str) -> bytes:
