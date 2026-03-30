@@ -185,12 +185,21 @@ async function sendChat() {
       body: JSON.stringify({user_id: userId, message: msg})
     });
     hideTyping();
+    if (!res.ok) {
+      const err = await res.text();
+      addSystem('发送失败: ' + err.substring(0, 100));
+      return;
+    }
     const data = await res.json();
-    addAI(data.reply);
-    updateStatus(data);
-    addSystem('聊天 +5 心意');
-    coins += 5;
-    document.getElementById('coinsText').textContent = coins + ' 心意';
+    if (data && data.reply) {
+      addAI(data.reply);
+      updateStatus(data);
+      addSystem('聊天 +5 心意');
+      coins += 5;
+      document.getElementById('coinsText').textContent = coins + ' 心意';
+    } else {
+      addSystem('回复异常: ' + JSON.stringify(data).substring(0, 100));
+    }
   } catch(e) {
     hideTyping();
     addSystem('发送失败: ' + e.message);
