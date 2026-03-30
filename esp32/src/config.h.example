@@ -1,0 +1,13 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// ========== WiFi ==========
+#define WIFI_SSID     "your_wifi_ssid"
+#define WIFI_PASSWORD "your_wifi_password"
+
+// ========== 后端服务器（你电脑的局域网 IP）==========
+#define SERVER_URL    "http://192.168.1.100:8000"
+#define USER_NICKNAME "ESP32机器人"
+
+// 以下内容从 config.h.example 复制到 config.h 后修改
+// config.h 不会上传到 Git

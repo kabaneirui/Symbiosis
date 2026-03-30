@@ -38,6 +38,7 @@ __pycache__/
 # === 敏感信息 ===
 server/.env
 .env
+esp32/src/config.h
 
 # === ESP32 ===
 esp32/.pio/
